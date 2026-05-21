@@ -9,10 +9,10 @@ SESSION=$(curl -sf -X POST "$BASE/chat/sessions" \
 echo "session=$SESSION"
 
 TMP=$(mktemp)
-curl -sfN -X POST "$BASE/chat/sessions/$SESSION/messages" \
+curl -sN --max-time 180 -X POST "$BASE/chat/sessions/$SESSION/messages" \
   -H 'Content-Type: application/json' \
   -d "{\"message\":\"Почему не отжимает?\",\"chat_session_id\":\"$SESSION\",\"stream\":true}" \
-  > "$TMP"
+  > "$TMP" || { echo "stream request failed"; exit 1; }
 
 LINES=$(wc -l < "$TMP")
 echo "lines=$LINES"

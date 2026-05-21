@@ -104,6 +104,7 @@ fun Application.configureRoutes(
                                 }
                                 write(line)
                                 write("\n")
+                                flush()
                             }
                             println("[masterdoc stream] session=$id total_lines=$lineCount")
                         }
