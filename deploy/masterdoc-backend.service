@@ -1,0 +1,14 @@
+[Unit]
+Description=Masterdoc API proxy
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/masterdoc/backend.env
+WorkingDirectory=/opt/masterdoc-backend
+ExecStart=/usr/bin/java -jar /opt/masterdoc-backend/masterdoc-backend.jar
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
