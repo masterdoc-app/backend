@@ -23,6 +23,7 @@ import pro.masterdoc.backend.model.AssistantDto
 import pro.masterdoc.backend.model.CreateChatSessionRequest
 import pro.masterdoc.backend.model.CreateChatSessionResponse
 import pro.masterdoc.backend.model.GetChatSessionResponse
+import pro.masterdoc.backend.model.chatAssistantDisplayName
 import pro.masterdoc.backend.model.isChatAssistant
 import pro.masterdoc.backend.model.OnyxPersonaSnapshot
 import pro.masterdoc.backend.model.SendChatMessageRequest
@@ -36,7 +37,7 @@ class OnyxClient(
         val personas: List<OnyxPersonaSnapshot> = authorizedGet("/persona")
         return personas
             .filter { it.isChatAssistant() }
-            .map { AssistantDto(id = it.id, name = it.name) }
+            .map { AssistantDto(id = it.id, name = it.chatAssistantDisplayName()) }
     }
 
     suspend fun createChatSession(personaId: Int): CreateChatSessionResponse =

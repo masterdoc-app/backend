@@ -60,6 +60,12 @@ data class OnyxPersonaSnapshot(
     val name: String,
 )
 
+private const val CHAT_ASSISTANT_SUFFIX = "-chat"
+
 /** Onyx personas exposed in the app as selectable chats (name suffix from admin UI). */
 fun OnyxPersonaSnapshot.isChatAssistant(): Boolean =
-    name.endsWith("-chat", ignoreCase = true)
+    name.endsWith(CHAT_ASSISTANT_SUFFIX, ignoreCase = true)
+
+/** Display name for chat personas (suffix is for Onyx admin only). */
+fun OnyxPersonaSnapshot.chatAssistantDisplayName(): String =
+    if (isChatAssistant()) name.dropLast(CHAT_ASSISTANT_SUFFIX.length) else name

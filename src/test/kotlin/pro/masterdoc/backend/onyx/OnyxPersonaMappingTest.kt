@@ -3,6 +3,7 @@ package pro.masterdoc.backend.onyx
 import kotlinx.serialization.json.Json
 import pro.masterdoc.backend.model.AssistantDto
 import pro.masterdoc.backend.model.OnyxPersonaSnapshot
+import pro.masterdoc.backend.model.chatAssistantDisplayName
 import pro.masterdoc.backend.model.isChatAssistant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,11 +23,11 @@ class OnyxPersonaMappingTest {
         val personas = json.decodeFromString<List<OnyxPersonaSnapshot>>(raw)
         val assistants = personas
             .filter { it.isChatAssistant() }
-            .map { AssistantDto(id = it.id, name = it.name) }
+            .map { AssistantDto(id = it.id, name = it.chatAssistantDisplayName()) }
         assertEquals(
             listOf(
-                AssistantDto(2, "Атлант-стиралки-chat"),
-                AssistantDto(3, "Атлант-холодильники-chat"),
+                AssistantDto(2, "Атлант-стиралки"),
+                AssistantDto(3, "Атлант-холодильники"),
             ),
             assistants,
         )

@@ -22,6 +22,18 @@ curl http://127.0.0.1:8081/v1/assistants
 
 ## Deploy
 
-Push to `main` → GitHub Actions builds JAR, rsyncs to Onyx VPS, systemd restart.
+Push to `main` → GitHub Actions builds JAR, rsyncs to Onyx VPS, systemd restart, nginx site reload.
 
-Nginx on `80.87.196.33`: `api.masterdoc.pro` → `127.0.0.1:8081`.
+**GitHub Secrets (repo `masterdoc-app/backend`):** `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_USER`, `ONYX_PAT`.
+
+Nginx on `80.87.196.33`: `api.masterdoc.pro` → `127.0.0.1:8081` ([`deploy/api.masterdoc.pro.nginx.conf`](deploy/api.masterdoc.pro.nginx.conf)).
+
+TLS (once HTTP works): `certbot --nginx -d api.masterdoc.pro`
+
+## Smoke
+
+```bash
+./scripts/smoke-api.sh http://127.0.0.1:8081
+# production (after deploy):
+./scripts/smoke-api.sh http://api.masterdoc.pro
+```
