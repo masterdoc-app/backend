@@ -1,3 +1,5 @@
+import org.gradle.api.file.DuplicatesStrategy
+
 plugins {
     kotlin("jvm") version "2.1.10"
     kotlin("plugin.serialization") version "2.1.10"
@@ -33,6 +35,18 @@ kotlin {
 
 application {
     mainClass.set("pro.masterdoc.backend.ApplicationKt")
+}
+
+tasks.jar {
+    manifest {
+        attributes["Main-Class"] = "pro.masterdoc.backend.ApplicationKt"
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(
+        configurations.runtimeClasspath.get().map { dependency ->
+            if (dependency.isDirectory) dependency else zipTree(dependency)
+        },
+    )
 }
 
 tasks.test {

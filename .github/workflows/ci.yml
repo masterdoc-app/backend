@@ -42,7 +42,11 @@ jobs:
           java-version: "21"
 
       - name: Build fat jar
-        run: ./gradlew jar --no-daemon && cp build/libs/masterdoc-backend-0.1.0.jar masterdoc-backend.jar
+        run: |
+          ./gradlew jar --no-daemon
+          cp build/libs/masterdoc-backend-0.1.0.jar masterdoc-backend.jar
+          ls -lh masterdoc-backend.jar
+          test "$(stat -c%s masterdoc-backend.jar)" -gt 1000000
 
       - name: Verify deploy secrets
         env:
@@ -73,6 +77,7 @@ jobs:
           rsync -avz -e "ssh -i $HOME/.ssh/deploy_ed25519 -o IdentitiesOnly=yes" \
             masterdoc-backend.jar \
             deploy/masterdoc-backend.service \
+            deploy/api.masterdoc.pro.nginx.conf \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
           ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -86,10 +91,23 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cp ${DEPLOY_PATH}/masterdoc-backend.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable masterdoc-backend && systemctl restart masterdoc-backend"
 
+      - name: Install nginx site and reload
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cp ${DEPLOY_PATH}/api.masterdoc.pro.nginx.conf /etc/nginx/sites-available/api.masterdoc.pro && \
+             ln -sf /etc/nginx/sites-available/api.masterdoc.pro /etc/nginx/sites-enabled/api.masterdoc.pro && \
+             nginx -t && systemctl reload nginx"
+
       - name: Smoke health (loopback on VPS)
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "sleep 3 && curl -fsS http://127.0.0.1:8081/health"
+            "sleep 5 && curl -fsS http://127.0.0.1:8081/health && curl -fsS http://127.0.0.1:8081/v1/assistants | head -c 200" \
+          || ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "systemctl status masterdoc-backend --no-pager; journalctl -u masterdoc-backend -n 30 --no-pager"
