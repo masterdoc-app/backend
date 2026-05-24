@@ -59,3 +59,7 @@ data class OnyxPersonaSnapshot(
     val id: Int,
     val name: String,
 )
+
+/** Onyx personas exposed in the app as selectable chats (name suffix from admin UI). */
+fun OnyxPersonaSnapshot.isChatAssistant(): Boolean =
+    name.endsWith("-chat", ignoreCase = true)
