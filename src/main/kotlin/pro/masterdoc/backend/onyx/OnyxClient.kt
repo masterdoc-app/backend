@@ -29,8 +29,9 @@ import pro.masterdoc.backend.model.CreateChatSessionResponse
 import pro.masterdoc.backend.model.GetChatSessionResponse
 import pro.masterdoc.backend.model.OnyxFileDescriptor
 import pro.masterdoc.backend.model.OnyxPersonaSnapshot
+import pro.masterdoc.backend.model.OnyxSendChatMessageRequest
 import pro.masterdoc.backend.model.OnyxSendMessageWithFilesRequest
-import pro.masterdoc.backend.model.SendChatMessageRequest
+import pro.masterdoc.backend.model.OnyxToolSnapshot
 import pro.masterdoc.backend.model.SendChatMessageResponse
 import pro.masterdoc.backend.model.UserFileSnapshot
 import pro.masterdoc.backend.model.chatAssistantDisplayName
@@ -40,6 +41,7 @@ class OnyxClient(
     private val config: AppConfig,
     private val http: HttpClient = defaultHttp(),
 ) {
+    private var resolvedSearchToolId: Int? = null
     suspend fun listAssistants(): List<AssistantDto> {
         val personas: List<OnyxPersonaSnapshot> = authorizedGet("/persona")
         return personas
@@ -62,9 +64,9 @@ class OnyxClient(
             contentType(ContentType.Application.Json)
             setBody(
                 json.encodeToString(
-                    SendChatMessageRequest(
+                    buildOnyxSendRequest(
                         message = message,
-                        chatSessionId = sessionId,
+                        sessionId = sessionId,
                         stream = false,
                     ),
                 ),
@@ -147,9 +149,9 @@ class OnyxClient(
             contentType(ContentType.Application.Json)
             setBody(
                 json.encodeToString(
-                    SendChatMessageRequest(
+                    buildOnyxSendRequest(
                         message = message,
-                        chatSessionId = sessionId,
+                        sessionId = sessionId,
                         stream = true,
                     ),
                 ),
@@ -193,9 +195,45 @@ class OnyxClient(
         return json.decodeFromString(raw)
     }
 
+    private suspend fun buildOnyxSendRequest(
+        message: String,
+        sessionId: String,
+        stream: Boolean,
+    ): OnyxSendChatMessageRequest = OnyxSendChatMessageRequest(
+        message = message,
+        chatSessionId = sessionId,
+        stream = stream,
+        forcedToolId = resolveForcedSearchToolId(),
+    )
+
+    private suspend fun resolveForcedSearchToolId(): Int? {
+        if (!config.forceInternalSearch) {
+            return null
+        }
+        config.searchToolId?.let { return it }
+        resolvedSearchToolId?.let { return it }
+        resolvedSearchToolId = fetchSearchToolId()
+        return resolvedSearchToolId
+    }
+
+    private suspend fun fetchSearchToolId(): Int? {
+        val tools = try {
+            authorizedGet<List<OnyxToolSnapshot>>("/tool")
+        } catch (error: Exception) {
+            println("[OnyxClient] GET /tool failed, internal search will not be forced: ${error.message}")
+            return null
+        }
+        val toolId = tools.firstOrNull { it.inCodeToolId == SEARCH_TOOL_IN_CODE_ID }?.id
+        if (toolId == null) {
+            println("[OnyxClient] SearchTool not found in GET /tool; internal search will not be forced")
+        }
+        return toolId
+    }
+
     private fun bearer(): String = "Bearer ${config.onyxPat}"
 
     companion object {
+        internal const val SEARCH_TOOL_IN_CODE_ID = "SearchTool"
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true

@@ -44,11 +44,28 @@ data class GetChatSessionResponse(
     val messages: List<OnyxChatMessageDto> = emptyList(),
 )
 
+/** Request body from Masterdoc clients to POST /v1/chat/sessions/{id}/messages. */
 @Serializable
 data class SendChatMessageRequest(
     val message: String,
     @SerialName("chat_session_id") val chatSessionId: String,
     val stream: Boolean = false,
+)
+
+/** Outbound payload to Onyx POST /chat/send-chat-message. */
+@Serializable
+data class OnyxSendChatMessageRequest(
+    val message: String,
+    @SerialName("chat_session_id") val chatSessionId: String,
+    val stream: Boolean = false,
+    @SerialName("forced_tool_id") val forcedToolId: Int? = null,
+)
+
+/** Minimal fields from Onyx GET /tool */
+@Serializable
+data class OnyxToolSnapshot(
+    val id: Int,
+    @SerialName("in_code_tool_id") val inCodeToolId: String? = null,
 )
 
 @Serializable

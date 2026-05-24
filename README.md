@@ -8,6 +8,10 @@ Proxies Onyx for KMP clients. Public base: `https://api.masterdoc.pro/v1`.
 ONYX_BASE_URL=http://127.0.0.1:3000/api
 ONYX_PAT=onyx_pat_...
 PORT=8081
+# Force Onyx internal search on every chat message (default: true)
+ONYX_FORCE_INTERNAL_SEARCH=true
+# Optional override; otherwise resolved via GET /tool (SearchTool)
+# ONYX_SEARCH_TOOL_ID=1
 ```
 
 ## Run locally
