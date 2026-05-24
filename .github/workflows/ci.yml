@@ -78,6 +78,8 @@ jobs:
             masterdoc-backend.jar \
             deploy/masterdoc-backend.service \
             deploy/api.masterdoc.pro.nginx.conf \
+            deploy/api.masterdoc.pro.nginx.http.conf \
+            deploy/install-api-nginx.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
           ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -91,23 +93,23 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cp ${DEPLOY_PATH}/masterdoc-backend.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable masterdoc-backend && systemctl restart masterdoc-backend"
 
-      - name: Install nginx site and reload
+      - name: Install nginx site and TLS
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         run: |
           ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cp ${DEPLOY_PATH}/api.masterdoc.pro.nginx.conf /etc/nginx/sites-available/api.masterdoc.pro && \
-             ln -sf /etc/nginx/sites-available/api.masterdoc.pro /etc/nginx/sites-enabled/api.masterdoc.pro && \
-             nginx -t && systemctl reload nginx"
+            "chmod +x ${DEPLOY_PATH}/install-api-nginx.sh && \
+             CERTBOT_EMAIL='${CERTBOT_EMAIL:-admin@masterdoc.pro}' ${DEPLOY_PATH}/install-api-nginx.sh"
 
-      - name: Smoke health (loopback on VPS)
+      - name: Smoke health (HTTPS)
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "sleep 5 && curl -fsS http://127.0.0.1:8081/health && curl -fsS http://127.0.0.1:8081/v1/assistants | head -c 200" \
+            "sleep 3 && curl -fsS https://api.masterdoc.pro/health && curl -fsS https://api.masterdoc.pro/v1/assistants | head -c 200" \
           || ssh -i "$HOME/.ssh/deploy_ed25519" -o IdentitiesOnly=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "systemctl status masterdoc-backend --no-pager; journalctl -u masterdoc-backend -n 30 --no-pager"
+            "curl -fsS http://127.0.0.1:8081/health; systemctl status nginx --no-pager; journalctl -u nginx -n 20 --no-pager"
