@@ -11,7 +11,7 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import kotlinx.serialization.json.Json
 import pro.masterdoc.backend.config.AppConfig
-import pro.masterdoc.backend.detect.StubAssistantDetector
+import pro.masterdoc.backend.detect.OnyxAssistantDetector
 import pro.masterdoc.backend.onyx.OnyxClient
 import pro.masterdoc.backend.routing.configureRoutes
 
@@ -40,5 +40,5 @@ fun Application.module(config: AppConfig) {
         anyHost()
     }
     val onyx = OnyxClient(config)
-    configureRoutes(onyx, StubAssistantDetector())
+    configureRoutes(onyx, OnyxAssistantDetector(onyx, config))
 }

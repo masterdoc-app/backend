@@ -3,6 +3,8 @@ package pro.masterdoc.backend.onyx
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -13,6 +15,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.utils.io.readUTF8Line
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -20,14 +23,18 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import pro.masterdoc.backend.config.AppConfig
 import pro.masterdoc.backend.model.AssistantDto
+import pro.masterdoc.backend.model.CategorizedFilesSnapshot
 import pro.masterdoc.backend.model.CreateChatSessionRequest
 import pro.masterdoc.backend.model.CreateChatSessionResponse
 import pro.masterdoc.backend.model.GetChatSessionResponse
-import pro.masterdoc.backend.model.chatAssistantDisplayName
-import pro.masterdoc.backend.model.isChatAssistant
+import pro.masterdoc.backend.model.OnyxFileDescriptor
 import pro.masterdoc.backend.model.OnyxPersonaSnapshot
+import pro.masterdoc.backend.model.OnyxSendMessageWithFilesRequest
 import pro.masterdoc.backend.model.SendChatMessageRequest
 import pro.masterdoc.backend.model.SendChatMessageResponse
+import pro.masterdoc.backend.model.UserFileSnapshot
+import pro.masterdoc.backend.model.chatAssistantDisplayName
+import pro.masterdoc.backend.model.isChatAssistant
 
 class OnyxClient(
     private val config: AppConfig,
@@ -68,6 +75,66 @@ class OnyxClient(
             throw OnyxException(response.status, raw.take(500))
         }
         return SendResponseParser.parse(raw)
+    }
+
+    suspend fun uploadUserChatFile(
+        bytes: ByteArray,
+        fileName: String,
+        contentType: String,
+    ): UserFileSnapshot {
+        val response: HttpResponse = http.post("${config.onyxBaseUrl}/user/projects/file/upload") {
+            header(HttpHeaders.Authorization, bearer())
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "files",
+                            bytes,
+                            Headers.build {
+                                append(HttpHeaders.ContentType, contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                            },
+                        )
+                    },
+                ),
+            )
+        }
+        val snapshot: CategorizedFilesSnapshot = decodeResponse(response)
+        val file = snapshot.userFiles.firstOrNull()
+            ?: throw OnyxException(HttpStatusCode.BadGateway, "Onyx returned no uploaded files")
+        return file
+    }
+
+    suspend fun sendDetectMessage(
+        message: String,
+        uploadedFile: UserFileSnapshot,
+        personaId: Int,
+    ): String {
+        val response: HttpResponse = http.post("${config.onyxBaseUrl}/chat/send-chat-message") {
+            header(HttpHeaders.Authorization, bearer())
+            contentType(ContentType.Application.Json)
+            setBody(
+                json.encodeToString(
+                    OnyxSendMessageWithFilesRequest(
+                        message = message,
+                        stream = false,
+                        chatSessionInfo = CreateChatSessionRequest(personaId = personaId),
+                        fileDescriptors = listOf(
+                            OnyxFileDescriptor(
+                                id = uploadedFile.fileId,
+                                type = uploadedFile.chatFileType,
+                                userFileId = uploadedFile.id,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        val raw = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw OnyxException(response.status, raw.take(500))
+        }
+        return SendResponseParser.parse(raw).answer
     }
 
     suspend fun streamChatMessage(

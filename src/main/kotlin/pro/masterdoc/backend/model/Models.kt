@@ -9,6 +9,12 @@ data class AssistantDto(
     val name: String,
 )
 
+/** Result of POST /v1/assistants/detect — display name without `-chat` suffix, or null. */
+@Serializable
+data class DetectAssistantResponse(
+    val assistant: String? = null,
+)
+
 @Serializable
 data class ErrorResponse(
     val error: String,
@@ -43,6 +49,34 @@ data class SendChatMessageRequest(
     val message: String,
     @SerialName("chat_session_id") val chatSessionId: String,
     val stream: Boolean = false,
+)
+
+@Serializable
+data class OnyxFileDescriptor(
+    val id: String,
+    val type: String,
+    @SerialName("user_file_id") val userFileId: String,
+)
+
+@Serializable
+data class OnyxSendMessageWithFilesRequest(
+    val message: String,
+    val stream: Boolean = false,
+    @SerialName("chat_session_info") val chatSessionInfo: CreateChatSessionRequest? = null,
+    @SerialName("file_descriptors") val fileDescriptors: List<OnyxFileDescriptor> = emptyList(),
+)
+
+@Serializable
+data class UserFileSnapshot(
+    val id: String,
+    @SerialName("file_id") val fileId: String,
+    @SerialName("chat_file_type") val chatFileType: String,
+    val name: String = "upload",
+)
+
+@Serializable
+data class CategorizedFilesSnapshot(
+    @SerialName("user_files") val userFiles: List<UserFileSnapshot> = emptyList(),
 )
 
 @Serializable

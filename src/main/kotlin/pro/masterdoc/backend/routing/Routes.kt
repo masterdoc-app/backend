@@ -6,6 +6,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
@@ -16,6 +17,7 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import pro.masterdoc.backend.detect.AssistantDetector
 import pro.masterdoc.backend.model.CreateChatSessionRequest
+import pro.masterdoc.backend.model.DetectAssistantResponse
 import pro.masterdoc.backend.model.ErrorResponse
 import pro.masterdoc.backend.model.SendChatMessageRequest
 import pro.masterdoc.backend.onyx.OnyxClient
@@ -43,18 +45,41 @@ fun Application.configureRoutes(
             }
 
             post("/assistants/detect") {
-                var hasImage = false
+                var imageBytes: ByteArray? = null
+                var fileName = "image.jpg"
+                var contentType = "image/jpeg"
                 call.receiveMultipart().forEachPart { part ->
-                    if (part.name == "image") {
-                        hasImage = true
+                    when (part) {
+                        is PartData.FileItem -> if (part.name == "image") {
+                            imageBytes = part.streamProvider().readBytes()
+                            fileName = part.originalFileName?.takeIf { it.isNotBlank() } ?: fileName
+                            contentType = part.contentType?.toString()?.takeIf { it.isNotBlank() }
+                                ?: guessImageContentType(fileName)
+                        }
+                        else -> Unit
                     }
                     part.dispose()
                 }
-                if (!hasImage) {
+                val bytes = imageBytes
+                if (bytes == null || bytes.isEmpty()) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "image field required"))
                     return@post
                 }
-                call.respond(HttpStatusCode.NotImplemented, ErrorResponse(error = "not_implemented"))
+                try {
+                    val detected = detector.detectAssistantName(
+                        imageBytes = bytes,
+                        fileName = fileName,
+                        contentType = contentType,
+                    )
+                    call.respond(DetectAssistantResponse(assistant = detected))
+                } catch (e: OnyxException) {
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        ErrorResponse(error = "Onyx error: ${e.status.value}"),
+                    )
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = e.message ?: "bad request"))
+                }
             }
 
             post("/chat/sessions") {
@@ -125,4 +150,11 @@ fun Application.configureRoutes(
             }
         }
     }
+}
+
+private fun guessImageContentType(fileName: String): String = when {
+    fileName.endsWith(".png", ignoreCase = true) -> "image/png"
+    fileName.endsWith(".webp", ignoreCase = true) -> "image/webp"
+    fileName.endsWith(".gif", ignoreCase = true) -> "image/gif"
+    else -> "image/jpeg"
 }
