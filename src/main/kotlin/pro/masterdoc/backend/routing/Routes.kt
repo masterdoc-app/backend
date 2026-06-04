@@ -65,7 +65,17 @@ fun Application.configureRoutes(
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "image field required"))
                     return@post
                 }
+                if (bytes.size > DETECT_MAX_IMAGE_BYTES) {
+                    call.respond(
+                        HttpStatusCode.PayloadTooLarge,
+                        ErrorResponse(
+                            error = "Image too large (${bytes.size} bytes). Max ${DETECT_MAX_IMAGE_BYTES / (1024 * 1024)} MB.",
+                        ),
+                    )
+                    return@post
+                }
                 try {
+                    println("[masterdoc detect] image bytes=${bytes.size} file=$fileName type=$contentType")
                     val detected = detector.detectAssistantName(
                         imageBytes = bytes,
                         fileName = fileName,
@@ -73,12 +83,19 @@ fun Application.configureRoutes(
                     )
                     call.respond(DetectAssistantResponse(assistant = detected))
                 } catch (e: OnyxException) {
+                    println("[masterdoc detect] Onyx error ${e.status.value}: ${e.bodySnippet}")
                     call.respond(
                         HttpStatusCode.BadGateway,
                         ErrorResponse(error = "Onyx error: ${e.status.value}"),
                     )
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = e.message ?: "bad request"))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "detect failed"),
+                    )
                 }
             }
 
@@ -151,6 +168,8 @@ fun Application.configureRoutes(
         }
     }
 }
+
+private const val DETECT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 private fun guessImageContentType(fileName: String): String = when {
     fileName.endsWith(".png", ignoreCase = true) -> "image/png"
