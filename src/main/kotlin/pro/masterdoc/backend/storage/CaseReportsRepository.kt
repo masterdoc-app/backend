@@ -32,6 +32,12 @@ class CaseReportsRepository(
                 statement.executeUpdate(
                     "CREATE INDEX IF NOT EXISTS idx_case_reports_created ON case_reports(created_at DESC)",
                 )
+                statement.executeUpdate(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_case_reports_assistant_created
+                    ON case_reports(assistant_id, created_at DESC)
+                    """.trimIndent(),
+                )
             }
         }
     }
@@ -70,22 +76,41 @@ class CaseReportsRepository(
         )
     }
 
-    fun list(page: Int, size: Int, assistantId: Int?): PaginatedCaseReportsResponse {
+    fun list(assistantId: Int, page: Int, size: Int): PaginatedCaseReportsResponse =
+        paginate(
+            whereClause = "WHERE assistant_id = ?",
+            bindArgs = listOf(BindArg.IntValue(assistantId)),
+            page = page,
+            size = size,
+        )
+
+    /**
+     * Paginated text search within one assistant (for future GET /v1/report/search).
+     */
+    fun search(assistantId: Int, query: String, page: Int, size: Int): PaginatedCaseReportsResponse {
+        val pattern = "%${escapeLike(query.trim())}%"
+        return paginate(
+            whereClause = "WHERE assistant_id = ? AND result LIKE ? ESCAPE '\\'",
+            bindArgs = listOf(BindArg.IntValue(assistantId), BindArg.StringValue(pattern)),
+            page = page,
+            size = size,
+        )
+    }
+
+    private fun paginate(
+        whereClause: String,
+        bindArgs: List<BindArg>,
+        page: Int,
+        size: Int,
+    ): PaginatedCaseReportsResponse {
         val safePage = page.coerceAtLeast(0)
         val safeSize = size.coerceIn(1, 100)
         val offset = safePage * safeSize
-        val (whereClause, filterArgs) = if (assistantId != null) {
-            "WHERE assistant_id = ?" to listOf(assistantId)
-        } else {
-            "" to emptyList<Int>()
-        }
         DriverManager.getConnection(jdbcUrl()).use { connection ->
             val total = connection.prepareStatement(
                 "SELECT COUNT(*) FROM case_reports $whereClause",
             ).use { statement ->
-                filterArgs.forEachIndexed { index, value ->
-                    statement.setInt(index + 1, value)
-                }
+                bindArgs.forEachIndexed { index, arg -> arg.apply(statement, index + 1) }
                 statement.executeQuery().use { result ->
                     result.next()
                     result.getInt(1)
@@ -101,42 +126,61 @@ class CaseReportsRepository(
                 """.trimIndent(),
             ).use { statement ->
                 var paramIndex = 1
-                filterArgs.forEach { value ->
-                    statement.setInt(paramIndex++, value)
+                bindArgs.forEach { arg ->
+                    arg.apply(statement, paramIndex++)
                 }
                 statement.setInt(paramIndex++, safeSize)
                 statement.setInt(paramIndex, offset)
-                statement.executeQuery().use { result ->
-                    buildList {
-                        while (result.next()) {
-                            add(
-                                CaseReportDto(
-                                    id = result.getString("id"),
-                                    createdAt = result.getString("created_at"),
-                                    assistantId = result.getInt("assistant_id"),
-                                    conversationId = result.getString("conversation_id"),
-                                    result = result.getString("result"),
-                                    transcript = decodeTranscript(result.getString("transcript_json")),
-                                ),
-                            )
-                        }
-                    }
-                }
+                statement.executeQuery().use { result -> mapResultRows(result) }
             }
-            val hasMore = offset + items.size < total
             return PaginatedCaseReportsResponse(
                 items = items,
                 page = safePage,
                 size = safeSize,
                 total = total,
-                hasMore = hasMore,
+                hasMore = offset + items.size < total,
             )
         }
     }
+
+    private fun mapResultRows(result: java.sql.ResultSet): List<CaseReportDto> =
+        buildList {
+            while (result.next()) {
+                add(
+                    CaseReportDto(
+                        id = result.getString("id"),
+                        createdAt = result.getString("created_at"),
+                        assistantId = result.getInt("assistant_id"),
+                        conversationId = result.getString("conversation_id"),
+                        result = result.getString("result"),
+                        transcript = decodeTranscript(result.getString("transcript_json")),
+                    ),
+                )
+            }
+        }
 
     private fun decodeTranscript(raw: String): List<TranscriptTurnDto> =
         runCatching { json.decodeFromString<List<TranscriptTurnDto>>(raw) }
             .getOrElse { emptyList() }
 
     private fun jdbcUrl(): String = "jdbc:sqlite:$dbPath"
+
+    private sealed interface BindArg {
+        fun apply(statement: java.sql.PreparedStatement, index: Int)
+
+        data class IntValue(val value: Int) : BindArg {
+            override fun apply(statement: java.sql.PreparedStatement, index: Int) {
+                statement.setInt(index, value)
+            }
+        }
+
+        data class StringValue(val value: String) : BindArg {
+            override fun apply(statement: java.sql.PreparedStatement, index: Int) {
+                statement.setString(index, value)
+            }
+        }
+    }
+
+    private fun escapeLike(raw: String): String =
+        raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 }

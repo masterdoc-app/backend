@@ -102,7 +102,7 @@ fun Application.configureRoutes(
                 }
             }
 
-            post("/case-reports") {
+            post("/report") {
                 val body = call.receive<CreateCaseReportRequest>()
                 if (body.result.trim().length < 3) {
                     call.respond(
@@ -122,12 +122,19 @@ fun Application.configureRoutes(
                 }
             }
 
-            get("/case-reports") {
+            get("/report") {
+                val assistantId = call.request.queryParameters["assistant_id"]?.toIntOrNull()
+                if (assistantId == null) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse(error = "assistant_id query parameter is required"),
+                    )
+                    return@get
+                }
                 val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 0
                 val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 20
-                val assistantId = call.request.queryParameters["assistant_id"]?.toIntOrNull()
                 try {
-                    call.respond(caseReports.list(page = page, size = size, assistantId = assistantId))
+                    call.respond(caseReports.list(assistantId = assistantId, page = page, size = size))
                 } catch (e: Exception) {
                     e.printStackTrace()
                     call.respond(
