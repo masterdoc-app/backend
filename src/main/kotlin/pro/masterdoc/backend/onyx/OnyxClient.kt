@@ -239,10 +239,13 @@ class OnyxClient(
             isLenient = true
         }
 
+        /** Detect persona may run multi-minute agent search; must stay below nginx proxy_read_timeout. */
+        private const val ONYX_HTTP_TIMEOUT_MS = 600_000L
+
         private fun defaultHttp(): HttpClient = HttpClient(CIO) {
             install(HttpTimeout) {
-                requestTimeoutMillis = 180_000
-                socketTimeoutMillis = 180_000
+                requestTimeoutMillis = ONYX_HTTP_TIMEOUT_MS
+                socketTimeoutMillis = ONYX_HTTP_TIMEOUT_MS
             }
         }
     }

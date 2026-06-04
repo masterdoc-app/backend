@@ -25,6 +25,7 @@ dependencies {
     implementation("io.ktor:ktor-client-cio-jvm:$ktor")
     implementation("io.ktor:ktor-client-content-negotiation-jvm:$ktor")
     implementation("io.ktor:ktor-client-plugins-jvm:$ktor")
+    implementation("org.xerial:sqlite-jdbc:3.47.2.0")
 
     testImplementation(kotlin("test"))
 }

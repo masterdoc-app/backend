@@ -4,6 +4,8 @@ data class AppConfig(
     val port: Int,
     val onyxBaseUrl: String,
     val onyxPat: String,
+    /** SQLite file for saved case reports (transcript + result). */
+    val reportsDbPath: String,
     /** Onyx persona for /app?agentId=… routing (default agent 3). */
     val detectPersonaId: Int,
     /** When true, every chat message sends Onyx `forced_tool_id` for internal search. */
@@ -21,10 +23,13 @@ data class AppConfig(
             val detectPersonaId = System.getenv("DETECT_PERSONA_ID")?.toIntOrNull() ?: 3
             val forceInternalSearch = parseBooleanEnv("ONYX_FORCE_INTERNAL_SEARCH", default = true)
             val searchToolId = System.getenv("ONYX_SEARCH_TOOL_ID")?.toIntOrNull()
+            val reportsDbPath = System.getenv("REPORTS_DB_PATH")?.trim()
+                ?: "/opt/masterdoc-backend/data/case-reports.db"
             return AppConfig(
                 port = port,
                 onyxBaseUrl = onyxBaseUrl,
                 onyxPat = onyxPat,
+                reportsDbPath = reportsDbPath,
                 detectPersonaId = detectPersonaId,
                 forceInternalSearch = forceInternalSearch,
                 searchToolId = searchToolId,

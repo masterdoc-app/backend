@@ -16,16 +16,19 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import pro.masterdoc.backend.detect.AssistantDetector
+import pro.masterdoc.backend.model.CreateCaseReportRequest
 import pro.masterdoc.backend.model.CreateChatSessionRequest
 import pro.masterdoc.backend.model.DetectAssistantResponse
 import pro.masterdoc.backend.model.ErrorResponse
 import pro.masterdoc.backend.model.SendChatMessageRequest
 import pro.masterdoc.backend.onyx.OnyxClient
 import pro.masterdoc.backend.onyx.OnyxException
+import pro.masterdoc.backend.storage.CaseReportsRepository
 
 fun Application.configureRoutes(
     onyx: OnyxClient,
     detector: AssistantDetector,
+    caseReports: CaseReportsRepository,
 ) {
     routing {
         get("/health") {
@@ -95,6 +98,41 @@ fun Application.configureRoutes(
                     call.respond(
                         HttpStatusCode.InternalServerError,
                         ErrorResponse(error = e.message ?: "detect failed"),
+                    )
+                }
+            }
+
+            post("/case-reports") {
+                val body = call.receive<CreateCaseReportRequest>()
+                if (body.result.trim().length < 3) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse(error = "result must be at least 3 characters"),
+                    )
+                    return@post
+                }
+                try {
+                    call.respond(caseReports.insert(body))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "failed to save report"),
+                    )
+                }
+            }
+
+            get("/case-reports") {
+                val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 0
+                val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 20
+                val assistantId = call.request.queryParameters["assistant_id"]?.toIntOrNull()
+                try {
+                    call.respond(caseReports.list(page = page, size = size, assistantId = assistantId))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "failed to list reports"),
                     )
                 }
             }

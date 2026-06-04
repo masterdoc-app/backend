@@ -14,6 +14,8 @@ import pro.masterdoc.backend.config.AppConfig
 import pro.masterdoc.backend.detect.OnyxAssistantDetector
 import pro.masterdoc.backend.onyx.OnyxClient
 import pro.masterdoc.backend.routing.configureRoutes
+import pro.masterdoc.backend.storage.CaseReportsRepository
+import java.io.File
 
 fun main() {
     val config = AppConfig.fromEnv()
@@ -40,5 +42,9 @@ fun Application.module(config: AppConfig) {
         anyHost()
     }
     val onyx = OnyxClient(config)
-    configureRoutes(onyx, OnyxAssistantDetector(onyx, config))
+    val caseReports = CaseReportsRepository(config.reportsDbPath).also { repository ->
+        File(config.reportsDbPath).parentFile?.mkdirs()
+        repository.init()
+    }
+    configureRoutes(onyx, OnyxAssistantDetector(onyx, config), caseReports)
 }
