@@ -76,6 +76,27 @@ class CaseReportsRepository(
         )
     }
 
+    fun delete(id: String): Boolean {
+        DriverManager.getConnection(jdbcUrl()).use { connection ->
+            connection.prepareStatement("DELETE FROM case_reports WHERE id = ?").use { statement ->
+                statement.setString(1, id)
+                return statement.executeUpdate() > 0
+            }
+        }
+    }
+
+    /** Removes reports whose trimmed result is shorter than [minLength] characters. */
+    fun deleteShortResults(minLength: Int): Int {
+        DriverManager.getConnection(jdbcUrl()).use { connection ->
+            connection.prepareStatement(
+                "DELETE FROM case_reports WHERE LENGTH(TRIM(result)) < ?",
+            ).use { statement ->
+                statement.setInt(1, minLength)
+                return statement.executeUpdate()
+            }
+        }
+    }
+
     fun list(assistantId: Int, page: Int, size: Int): PaginatedCaseReportsResponse =
         paginate(
             whereClause = "WHERE assistant_id = ?",

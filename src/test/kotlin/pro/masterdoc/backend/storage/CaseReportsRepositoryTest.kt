@@ -89,4 +89,33 @@ class CaseReportsRepositoryTest {
         assertEquals(1, hits.total)
         assertEquals("Заменили компрессор холодильника", hits.items.single().result)
     }
+
+    @Test
+    fun deleteShortResults_removesOnlyShortReports() {
+        val dir = createTempDirectory("case-reports-test")
+        val dbPath = dir.resolve("test.db").toString()
+        val repository = CaseReportsRepository(dbPath).also { it.init() }
+
+        val long = repository.insert(
+            CreateCaseReportRequest(
+                assistantId = 2,
+                result = "Достаточно длинный итоговый отчёт мастера",
+                transcript = emptyList(),
+            ),
+        )
+        repository.insert(
+            CreateCaseReportRequest(
+                assistantId = 2,
+                result = "короткий",
+                transcript = emptyList(),
+            ),
+        )
+
+        val removed = repository.deleteShortResults(minLength = 21)
+        assertEquals(1, removed)
+
+        val page = repository.list(assistantId = 2, page = 0, size = 10)
+        assertEquals(1, page.total)
+        assertEquals(long.id, page.items.single().id)
+    }
 }

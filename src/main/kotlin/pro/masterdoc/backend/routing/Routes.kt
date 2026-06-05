@@ -11,6 +11,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondTextWriter
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -104,10 +105,10 @@ fun Application.configureRoutes(
 
             post("/report") {
                 val body = call.receive<CreateCaseReportRequest>()
-                if (body.result.trim().length < 3) {
+                if (body.result.trim().length < 21) {
                     call.respond(
                         HttpStatusCode.BadRequest,
-                        ErrorResponse(error = "result must be at least 3 characters"),
+                        ErrorResponse(error = "result must be longer than 20 characters"),
                     )
                     return@post
                 }
@@ -140,6 +141,41 @@ fun Application.configureRoutes(
                     call.respond(
                         HttpStatusCode.InternalServerError,
                         ErrorResponse(error = e.message ?: "failed to list reports"),
+                    )
+                }
+            }
+
+            delete("/report/short") {
+                val minLength = call.request.queryParameters["min_length"]?.toIntOrNull() ?: 21
+                try {
+                    val removed = caseReports.deleteShortResults(minLength)
+                    call.respond(mapOf("removed" to removed, "min_length" to minLength))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "failed to purge short reports"),
+                    )
+                }
+            }
+
+            delete("/report/{id}") {
+                val id = call.parameters["id"]?.trim().orEmpty()
+                if (id.isEmpty()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "report id is required"))
+                    return@delete
+                }
+                try {
+                    if (caseReports.delete(id)) {
+                        call.respond(HttpStatusCode.NoContent)
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, ErrorResponse(error = "report not found"))
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "failed to delete report"),
                     )
                 }
             }
