@@ -33,6 +33,7 @@ import pro.masterdoc.backend.model.OnyxSendChatMessageRequest
 import pro.masterdoc.backend.model.OnyxSendMessageWithFilesRequest
 import pro.masterdoc.backend.model.OnyxToolSnapshot
 import pro.masterdoc.backend.model.SendChatMessageResponse
+import pro.masterdoc.backend.model.TranscribeVoiceResponse
 import pro.masterdoc.backend.model.UserFileSnapshot
 import pro.masterdoc.backend.model.chatAssistantDisplayName
 import pro.masterdoc.backend.model.isChatAssistant
@@ -77,6 +78,43 @@ class OnyxClient(
             throw OnyxException(response.status, raw.take(500))
         }
         return SendResponseParser.parse(raw)
+    }
+
+    suspend fun transcribeAudio(
+        bytes: ByteArray,
+        fileName: String,
+        contentType: String = "audio/wav",
+    ): TranscribeVoiceResponse {
+        val response: HttpResponse = http.post("${config.onyxBaseUrl}/voice/transcribe") {
+            header(HttpHeaders.Authorization, bearer())
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "audio",
+                            bytes,
+                            Headers.build {
+                                append(HttpHeaders.ContentType, contentType)
+                                append(
+                                    HttpHeaders.ContentDisposition,
+                                    "filename=\"$fileName\"",
+                                )
+                            },
+                        )
+                    },
+                ),
+            )
+        }
+        val raw = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw OnyxException(response.status, raw.take(500))
+        }
+        val parsed = json.decodeFromString<Map<String, String>>(raw)
+        val text = parsed["text"]?.trim().orEmpty()
+        if (text.isEmpty()) {
+            throw OnyxException(HttpStatusCode.BadGateway, "Onyx transcribe returned empty text")
+        }
+        return TranscribeVoiceResponse(text = text)
     }
 
     suspend fun uploadUserChatFile(

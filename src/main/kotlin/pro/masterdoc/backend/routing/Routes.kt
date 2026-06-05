@@ -144,6 +144,46 @@ fun Application.configureRoutes(
                 }
             }
 
+            post("/voice/transcribe") {
+                var audioBytes: ByteArray? = null
+                var fileName = "recording.wav"
+                var contentType = "audio/wav"
+                call.receiveMultipart().forEachPart { part ->
+                    when (part) {
+                        is PartData.FileItem -> if (part.name == "audio") {
+                            audioBytes = part.streamProvider().readBytes()
+                            fileName = part.originalFileName?.takeIf { it.isNotBlank() } ?: fileName
+                            contentType = part.contentType?.toString()?.takeIf { it.isNotBlank() }
+                                ?: guessAudioContentType(fileName)
+                        }
+                        else -> Unit
+                    }
+                    part.dispose()
+                }
+                val bytes = audioBytes
+                if (bytes == null || bytes.isEmpty()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "audio field required"))
+                    return@post
+                }
+                if (bytes.size > VOICE_MAX_AUDIO_BYTES) {
+                    call.respond(
+                        HttpStatusCode.PayloadTooLarge,
+                        ErrorResponse(
+                            error = "Audio too large (${bytes.size} bytes). Max ${VOICE_MAX_AUDIO_BYTES / (1024 * 1024)} MB.",
+                        ),
+                    )
+                    return@post
+                }
+                try {
+                    call.respond(onyx.transcribeAudio(bytes, fileName, contentType))
+                } catch (e: OnyxException) {
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        ErrorResponse(error = "Onyx error: ${e.status.value}"),
+                    )
+                }
+            }
+
             post("/chat/sessions") {
                 val body = call.receive<CreateChatSessionRequest>()
                 try {
@@ -215,6 +255,15 @@ fun Application.configureRoutes(
 }
 
 private const val DETECT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+private const val VOICE_MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
+private fun guessAudioContentType(fileName: String): String = when {
+    fileName.endsWith(".webm", ignoreCase = true) -> "audio/webm"
+    fileName.endsWith(".ogg", ignoreCase = true) -> "audio/ogg"
+    fileName.endsWith(".mp3", ignoreCase = true) -> "audio/mpeg"
+    fileName.endsWith(".m4a", ignoreCase = true) -> "audio/mp4"
+    else -> "audio/wav"
+}
 
 private fun guessImageContentType(fileName: String): String = when {
     fileName.endsWith(".png", ignoreCase = true) -> "image/png"
