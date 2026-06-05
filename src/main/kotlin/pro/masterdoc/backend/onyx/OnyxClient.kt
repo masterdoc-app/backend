@@ -149,15 +149,28 @@ class OnyxClient(
         message: String,
         uploadedFile: UserFileSnapshot,
         personaId: Int,
+    ): String = streamDetectMessage(
+        message = message,
+        uploadedFile = uploadedFile,
+        personaId = personaId,
+        onLine = {},
+    )
+
+    suspend fun streamDetectMessage(
+        message: String,
+        uploadedFile: UserFileSnapshot,
+        personaId: Int,
+        onLine: suspend (String) -> Unit,
     ): String {
-        val response: HttpResponse = http.post("${config.onyxBaseUrl}/chat/send-chat-message") {
+        val rawLines = mutableListOf<String>()
+        http.preparePost("${config.onyxBaseUrl}/chat/send-chat-message") {
             header(HttpHeaders.Authorization, bearer())
             contentType(ContentType.Application.Json)
             setBody(
                 json.encodeToString(
                     OnyxSendMessageWithFilesRequest(
                         message = message,
-                        stream = false,
+                        stream = true,
                         chatSessionInfo = CreateChatSessionRequest(personaId = personaId),
                         fileDescriptors = listOf(
                             OnyxFileDescriptor(
@@ -169,12 +182,21 @@ class OnyxClient(
                     ),
                 ),
             )
+        }.execute { response ->
+            if (response.status.value !in 200..299) {
+                val raw = response.bodyAsText()
+                throw OnyxException(response.status, raw.take(500))
+            }
+            val channel = response.bodyAsChannel()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                if (line.isNotBlank()) {
+                    rawLines += line
+                    onLine(line)
+                }
+            }
         }
-        val raw = response.bodyAsText()
-        if (response.status.value !in 200..299) {
-            throw OnyxException(response.status, raw.take(500))
-        }
-        return SendResponseParser.parse(raw).answer
+        return SendResponseParser.parse(rawLines.joinToString("\n")).answer
     }
 
     suspend fun streamChatMessage(

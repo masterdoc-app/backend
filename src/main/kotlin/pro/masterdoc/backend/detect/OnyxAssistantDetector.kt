@@ -34,4 +34,29 @@ class OnyxAssistantDetector(
         )
         return DetectResponseParser.parse(answer, assistants.map { it.name })
     }
+
+    override suspend fun detectAssistantNameStreaming(
+        imageBytes: ByteArray,
+        fileName: String,
+        contentType: String,
+        onLine: suspend (String) -> Unit,
+    ): String? {
+        val assistants = onyx.listAssistants()
+        if (assistants.isEmpty()) {
+            return null
+        }
+        val prompt = DetectPrompt.build(assistants)
+        val uploaded = onyx.uploadUserChatFile(
+            bytes = imageBytes,
+            fileName = fileName,
+            contentType = contentType,
+        )
+        val answer = onyx.streamDetectMessage(
+            message = prompt,
+            uploadedFile = uploaded,
+            personaId = detectPersonaId,
+            onLine = onLine,
+        )
+        return DetectResponseParser.parse(answer, assistants.map { it.name })
+    }
 }

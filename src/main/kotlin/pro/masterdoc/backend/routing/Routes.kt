@@ -49,45 +49,61 @@ fun Application.configureRoutes(
             }
 
             post("/assistants/detect") {
-                var imageBytes: ByteArray? = null
-                var fileName = "image.jpg"
-                var contentType = "image/jpeg"
-                call.receiveMultipart().forEachPart { part ->
-                    when (part) {
-                        is PartData.FileItem -> if (part.name == "image") {
-                            imageBytes = part.streamProvider().readBytes()
-                            fileName = part.originalFileName?.takeIf { it.isNotBlank() } ?: fileName
-                            contentType = part.contentType?.toString()?.takeIf { it.isNotBlank() }
-                                ?: guessImageContentType(fileName)
-                        }
-                        else -> Unit
-                    }
-                    part.dispose()
-                }
-                val bytes = imageBytes
-                if (bytes == null || bytes.isEmpty()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "image field required"))
-                    return@post
-                }
-                if (bytes.size > DETECT_MAX_IMAGE_BYTES) {
-                    call.respond(
-                        HttpStatusCode.PayloadTooLarge,
-                        ErrorResponse(
-                            error = "Image too large (${bytes.size} bytes). Max ${DETECT_MAX_IMAGE_BYTES / (1024 * 1024)} MB.",
-                        ),
-                    )
-                    return@post
-                }
+                val upload = call.receiveDetectImageUpload() ?: return@post
                 try {
-                    println("[masterdoc detect] image bytes=${bytes.size} file=$fileName type=$contentType")
+                    println(
+                        "[masterdoc detect] image bytes=${upload.bytes.size} " +
+                            "file=${upload.fileName} type=${upload.contentType}",
+                    )
                     val detected = detector.detectAssistantName(
-                        imageBytes = bytes,
-                        fileName = fileName,
-                        contentType = contentType,
+                        imageBytes = upload.bytes,
+                        fileName = upload.fileName,
+                        contentType = upload.contentType,
                     )
                     call.respond(DetectAssistantResponse(assistant = detected))
                 } catch (e: OnyxException) {
                     println("[masterdoc detect] Onyx error ${e.status.value}: ${e.bodySnippet}")
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        ErrorResponse(error = "Onyx error: ${e.status.value}"),
+                    )
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = e.message ?: "bad request"))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ErrorResponse(error = e.message ?: "detect failed"),
+                    )
+                }
+            }
+
+            post("/assistants/detect/stream") {
+                val upload = call.receiveDetectImageUpload() ?: return@post
+                try {
+                    println(
+                        "[masterdoc detect stream] image bytes=${upload.bytes.size} " +
+                            "file=${upload.fileName} type=${upload.contentType}",
+                    )
+                    var lineCount = 0
+                    call.respondTextWriter(ContentType.Text.Plain) {
+                        val detected = detector.detectAssistantNameStreaming(
+                            imageBytes = upload.bytes,
+                            fileName = upload.fileName,
+                            contentType = upload.contentType,
+                        ) { line ->
+                            lineCount++
+                            write(line)
+                            write("\n")
+                            flush()
+                        }
+                        write("""{"detect_result":{"assistant":${jsonAssistant(detected)}}}""")
+                        write("\n")
+                        flush()
+                        println("[masterdoc detect stream] lines=$lineCount assistant=$detected")
+                    }
+                } catch (e: OnyxException) {
+                    println("[masterdoc detect stream] Onyx error ${e.status.value}: ${e.bodySnippet}")
                     call.respond(
                         HttpStatusCode.BadGateway,
                         ErrorResponse(error = "Onyx error: ${e.status.value}"),
@@ -291,6 +307,48 @@ fun Application.configureRoutes(
 }
 
 private const val DETECT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+private data class DetectImageUpload(
+    val bytes: ByteArray,
+    val fileName: String,
+    val contentType: String,
+)
+
+private suspend fun io.ktor.server.application.ApplicationCall.receiveDetectImageUpload(): DetectImageUpload? {
+    var imageBytes: ByteArray? = null
+    var fileName = "image.jpg"
+    var contentType = "image/jpeg"
+    receiveMultipart().forEachPart { part ->
+        when (part) {
+            is PartData.FileItem -> if (part.name == "image") {
+                imageBytes = part.streamProvider().readBytes()
+                fileName = part.originalFileName?.takeIf { it.isNotBlank() } ?: fileName
+                contentType = part.contentType?.toString()?.takeIf { it.isNotBlank() }
+                    ?: guessImageContentType(fileName)
+            }
+            else -> Unit
+        }
+        part.dispose()
+    }
+    val bytes = imageBytes
+    if (bytes == null || bytes.isEmpty()) {
+        respond(HttpStatusCode.BadRequest, ErrorResponse(error = "image field required"))
+        return null
+    }
+    if (bytes.size > DETECT_MAX_IMAGE_BYTES) {
+        respond(
+            HttpStatusCode.PayloadTooLarge,
+            ErrorResponse(
+                error = "Image too large (${bytes.size} bytes). Max ${DETECT_MAX_IMAGE_BYTES / (1024 * 1024)} MB.",
+            ),
+        )
+        return null
+    }
+    return DetectImageUpload(bytes = bytes, fileName = fileName, contentType = contentType)
+}
+
+private fun jsonAssistant(name: String?): String =
+    if (name == null) "null" else "\"${name.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 private const val VOICE_MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 private fun guessAudioContentType(fileName: String): String = when {
