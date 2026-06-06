@@ -168,17 +168,11 @@ class OnyxClient(
             contentType(ContentType.Application.Json)
             setBody(
                 json.encodeToString(
-                    OnyxSendMessageWithFilesRequest(
+                    buildDetectSendRequest(
                         message = message,
+                        personaId = personaId,
+                        uploadedFile = uploadedFile,
                         stream = true,
-                        chatSessionInfo = CreateChatSessionRequest(personaId = personaId),
-                        fileDescriptors = listOf(
-                            OnyxFileDescriptor(
-                                id = uploadedFile.fileId,
-                                type = uploadedFile.chatFileType,
-                                userFileId = uploadedFile.id,
-                            ),
-                        ),
                     ),
                 ),
             )
@@ -291,6 +285,27 @@ class OnyxClient(
     }
 
     private fun bearer(): String = "Bearer ${config.onyxPat}"
+
+    private fun buildDetectSendRequest(
+        message: String,
+        personaId: Int,
+        uploadedFile: UserFileSnapshot,
+        stream: Boolean,
+    ): OnyxSendMessageWithFilesRequest = OnyxSendMessageWithFilesRequest(
+        message = message,
+        stream = stream,
+        chatSessionInfo = CreateChatSessionRequest(personaId = personaId),
+        fileDescriptors = listOf(
+            OnyxFileDescriptor(
+                id = uploadedFile.fileId,
+                type = uploadedFile.chatFileType,
+                userFileId = uploadedFile.id,
+            ),
+        ),
+        // Detect is vision-only: do not run internal search (saves ~60–90s per request).
+        allowedToolIds = emptyList(),
+        forcedToolId = null,
+    )
 
     companion object {
         internal const val SEARCH_TOOL_IN_CODE_ID = "SearchTool"

@@ -2,7 +2,9 @@ package pro.masterdoc.backend.onyx
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import pro.masterdoc.backend.model.CreateChatSessionRequest
 import pro.masterdoc.backend.model.OnyxSendChatMessageRequest
+import pro.masterdoc.backend.model.OnyxSendMessageWithFilesRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -44,5 +46,20 @@ class OnyxSendChatMessageRequestTest {
     @Test
     fun searchToolInCodeIdMatchesOnyx() {
         assertEquals("SearchTool", OnyxClient.SEARCH_TOOL_IN_CODE_ID)
+    }
+
+    @Test
+    fun detectRequest_disablesToolsWithEmptyAllowedToolIds() {
+        val payload = json.encodeToString(
+            OnyxSendMessageWithFilesRequest(
+                message = "detect",
+                stream = true,
+                chatSessionInfo = CreateChatSessionRequest(personaId = 3),
+                allowedToolIds = emptyList(),
+                forcedToolId = null,
+            ),
+        )
+        assertTrue(payload.contains("\"allowed_tool_ids\":[]"))
+        assertFalse(payload.contains("forced_tool_id"))
     }
 }

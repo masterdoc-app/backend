@@ -81,6 +81,9 @@ data class OnyxSendMessageWithFilesRequest(
     val stream: Boolean = false,
     @SerialName("chat_session_info") val chatSessionInfo: CreateChatSessionRequest? = null,
     @SerialName("file_descriptors") val fileDescriptors: List<OnyxFileDescriptor> = emptyList(),
+    /** Empty list disables all persona tools (e.g. SearchTool) for detect. Null leaves Onyx defaults. */
+    @SerialName("allowed_tool_ids") val allowedToolIds: List<Int>? = null,
+    @SerialName("forced_tool_id") val forcedToolId: Int? = null,
 )
 
 @Serializable
